@@ -1,5 +1,5 @@
-from asynctimer import Scheduler
-from datafetcher import DataFetcher
+from util.asynctimer import Scheduler
+from util.datafetcher import DataFetcher
 from datetime import datetime
 import discord
 import random

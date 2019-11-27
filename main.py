@@ -7,7 +7,7 @@ if __name__ == '__main__':
     print('WaniKani Discord Bot - Copyright (C) 2019 - Alexander Colen')
     token = None
     print('Fetching settings.json...')
-    with open('settings.json') as json_data_file:
+    with open('resources/settings.json') as json_data_file:
         data = json.load(json_data_file)
         if data["CRABIGATOR_VERSION"]:
             print(f'Running Crabigator Bot v{data["CRABIGATOR_VERSION"]}')

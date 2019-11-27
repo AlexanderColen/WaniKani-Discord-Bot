@@ -1,5 +1,5 @@
-from models.wanikani.User import User
-from models.wanikani.Summary import Summary
+from .models.wanikani.User import User
+from .models.wanikani.Summary import Summary
 import json
 import requests
 
