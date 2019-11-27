@@ -30,6 +30,7 @@ if __name__ == '__main__':
     noToken = True
     while noToken:
         token = input('Enter Discord Bot token:\n>>>')
+        print('Attempting to login...')
         # Exit application if user prompts to.
         if token.lower() in ['quit', 'exit', 'q']:
             break

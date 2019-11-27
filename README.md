@@ -3,7 +3,8 @@ Discord bot written in Python for doing all kinds of WaniKani API actions.
 
 **Current features**
 * Add and remove a user from WaniKani API usage via the bot.
-* Read a WaniKani user's statistics and display them.
+* Display a WaniKani user's overall statistics.
+* Give a WaniKani user their daily overview.
 * Decide the bot's prefix for use in chat.
 * Offer global help with the bot.
 * Various image commands
