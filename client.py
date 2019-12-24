@@ -166,6 +166,7 @@ class WaniKaniBotClient(discord.Client):
                     content=f'Improper command usage. '
                     f'Example usage: `{self.prefix}adduser <WANIKANI_API_V2_TOKEN>`')
             elif len(words[1]) != 36 or '-' not in words[1]:
+                await message.delete()
                 await message.channel.send(
                     content='API token is invalid! '
                             'Make sure there are no dangling characters on either side!')
@@ -280,8 +281,20 @@ class WaniKaniBotClient(discord.Client):
                 embed.add_field(name='Completed Reviews',
                                 value=completed_reviews_data['total_count'],
                                 inline=False)
+                """
+                The total count for lessons in the /assignments resource is incorrect.
+                Instead of only showing the newest lessons since the ?updated_after query,
+                it shows 'lessons' that already have high srs_stages.
+                So to get the actual amount we need to loop through and parse the ones started after the current date.
+                So for example started_at being 2019-05-24 for the completed lessons on may 24th 2019.
+                """
+                completed_lessons = 0
+                for entry in completed_lessons_data['data']:
+                    # Parse the started_at date from the entry.
+                    if date == entry['data']['started_at'][0:entry['data']['started_at'].index('T')]:
+                        completed_lessons += 1
                 embed.add_field(name='Completed Lessons',
-                                value=completed_lessons_data['total_count'],
+                                value=str(completed_lessons),
                                 inline=False)
                 embed.add_field(name='Reviews available:',
                                 value=str(len(summary_data.available_reviews)),
