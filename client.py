@@ -20,8 +20,10 @@ class WaniKaniBotClient(discord.Client):
         self.descriptions = self.load_text_from_file_to_array(filename='resources/descriptions.txt')
         self.statuses = self.load_text_from_file_to_array(filename='resources/statuses.txt')
 
-    # Event method that gets called when the connection to Discord has been established.
     async def on_ready(self):
+        """
+        Event method that gets called when the connection to Discord has been established.
+        """
         version = discord.version_info
         print(f'Running on Discord.py v{version.major}.{version.minor}.{version.micro}-{version.releaselevel}\n')
         print('#################################')
@@ -30,8 +32,11 @@ class WaniKaniBotClient(discord.Client):
         await self.change_status()
         await self._scheduler.run(coro=self.change_status, time=60)
 
-    # Event method that gets called when the Discord client receives a new message.
     async def on_message(self, message):
+        """
+        Event method that gets called when the Discord client receives a new message.
+        :param message: The Discord.Message that was received.
+        """
         if message.author.id == self.user.id:
             return
 
@@ -49,14 +54,24 @@ class WaniKaniBotClient(discord.Client):
                         print(ex)
                         await self.oopsie(channel=message.channel, attempted_command=message.content.split(' ')[0])
 
-    # Send an image to a channel.
     @staticmethod
     async def send_image(channel, image_name):
+        """
+        Send an image to a channel.
+        :param channel: A Discord.TextChannel object to send the image to.
+        :param image_name: The local name of the image.
+        """
         with open(image_name, 'rb') as image:
             await channel.send(file=discord.File(fp=image, filename=image_name))
 
-    # Send an embedded message to a channel.
     async def send_embed(self, channel, embed, contains_description=False, contains_footer=False):
+        """
+        Send a Discord.Embed to a Discord.TextChannel. Adds a description and footer if none are attached.
+        :param channel: The Discord.TextChannel that the message should be sent to.
+        :param embed: The Discord.Embed object that should be sent.
+        :param contains_description: Boolean indicating whether the embed contains a description.
+        :param contains_footer: Boolean indicating whether the embed contains a footer.
+        """
         # Add a random description if it is empty.
         if not contains_description and len(self.descriptions) > 0:
             embed.description = f'_{random.choice(self.descriptions)}_'
@@ -68,9 +83,13 @@ class WaniKaniBotClient(discord.Client):
 
         await channel.send(embed=embed)
 
-    # Converts every line in a file to an entry in an array.
     @staticmethod
     def load_text_from_file_to_array(filename):
+        """
+        Converts every line in a file to an entry in an array. Makes sure that utf-8 encoding is used.
+        :param filename: The name of the local file.
+        :return: An array containing all the sentences.
+        """
         out = []
         with open(filename, 'r', encoding='utf-8') as f:
             for l in f:
@@ -78,35 +97,52 @@ class WaniKaniBotClient(discord.Client):
 
         return out
 
-    # Find a custom emoji from a guild containing one of the words in the given array.
     @staticmethod
     async def fetch_emoji(guild, emoji_array):
+        """
+        Find a custom emoji from a Discord.Guild containing one of the words in the given array.
+        :param guild: The Discord.Guild that should be searches.
+        :param emoji_array: The array of words that should be searched for.
+        :return: The first hit from the emoji_array properly formatted to be sent. Empty string if nothing was found.
+        """
         for em in await guild.fetch_emojis():
             if any(e in em.name.lower() for e in emoji_array):
                 return f'<:{em.name}:{em.id}>'
 
         return ''
 
-    # Change the status to a random one.
     async def change_status(self):
+        """
+        Changes the status of the Crabigator to a random sentence from resources.statuses.txt.
+        """
         await self.change_presence(
             activity=discord.Game(f'{random.choice(self.statuses)}')
         )
 
-        # Unknown WaniKani user error message.
     async def unknown_wanikani_user(self, channel):
+        """
+        Sends an error message when a WaniKani user wasn't registered yet with Crabigator.
+        :param channel: The Discord.TextChannel that the message should be sent to.
+        """
         await channel.send(
             content=f'Crabigator does not know this person. '
             f'Please use `{self.prefix}adduser <WANIKANI_API_V2_TOKEN>` and try again.')
 
-    # Generic error message.
     async def oopsie(self, channel, attempted_command):
+        """
+        Sends a generic error message if something went wrong.
+        :param channel: The Discord.TextChannel that the message should be sent to.
+        :param attempted_command: The Crabigator command that was attempted.
+        """
         await channel.send(
             content=f'Crabigator got too caught up studying and failed to handle `{self.prefix}{attempted_command}`. '
             f'Please try again.')
 
-    # Handle requests (commands) given to the Crabigator.
     async def handle_command(self, message):
+        """
+        Handle requests (commands) given to the Crabigator.
+        :param message: The Discord.Message that was received minus the prefix.
+        """
         words = message.content.split(' ')
         command = words[0].lower()
 
@@ -184,14 +220,22 @@ class WaniKaniBotClient(discord.Client):
                 content=f'Crabigator has yet to learn this ~~kanji~~ command. '
                 f'Refer to `{self.prefix}help` to see what I can do!')
 
-    # Get the user_data field from the DataFetcher as a User object.
     async def get_user_data_model(self, user_id):
+        """
+        Get the user_data field from the DataFetcher as a User object.
+        :param user_id: The Discord.User.id that was used to as the dictionary key.
+        """
         if 'USER_DATA' not in self._dataFetcher.wanikani_users[user_id]:
             await self._dataFetcher.fetch_wanikani_user_data(user_id=user_id)
         return self._dataFetcher.wanikani_users[user_id]['USER_DATA']
 
-    # Fetches and displays a WaniKani user.
     async def get_user_stats(self, words, channel, author):
+        """
+        Fetches and displays a WaniKani user.
+        :param words: Array of arguments, if there is a second one it is a specific Discord.User.
+        :param channel: The Discord.TextChannel that the message should be sent to.
+        :param author: The Discord.User that requested the statistics.
+        """
         if len(words) == 1:
             if author.id in self._dataFetcher.wanikani_users.keys():
                 user = await self._dataFetcher.fetch_wanikani_user_data(user_id=author.id)
@@ -209,8 +253,13 @@ class WaniKaniBotClient(discord.Client):
             else:
                 await self.unknown_wanikani_user(channel=channel)
 
-    # Fetches and displays daily statistics for a WaniKani user.
     async def get_daily_stats(self, words, channel, author):
+        """
+        Fetches the user's daily statistics and returns them neatly formatted.
+        :param words: Array of arguments, if there is a second one it is a specific Discord.User.
+        :param channel: The Discord.TextChannel that the message should be sent to.
+        :param author: The Discord.User that requested the statistics.
+        """
         if len(words) == 1:
             try:
                 user = await self.get_user_data_model(user_id=author.id)
@@ -244,8 +293,13 @@ class WaniKaniBotClient(discord.Client):
             except KeyError:
                 await self.unknown_wanikani_user(channel=channel)
 
-    # Fetches and displays leveling statistics for a WaniKani user.
     async def get_leveling_stats(self, words, channel, author):
+        """
+        Fetches the leveling statistics and returns them neatly formatted.
+        :param words: Array of arguments, if there is a second one it is a specific Discord.User.
+        :param channel: The Discord.TextChannel that the message should be sent to.
+        :param author: The Discord.User that requested the statistics.
+        """
         if len(words) == 1:
             try:
                 user = await self.get_user_data_model(user_id=author.id)
@@ -260,8 +314,12 @@ class WaniKaniBotClient(discord.Client):
             except KeyError:
                 await self.unknown_wanikani_user(channel=channel)
 
-    # Display help for the usage of the bot.
     async def get_help(self, words, channel):
+        """
+        Shows the help menu with all the known commands or the specified command in the arguments.
+        :param words: Array of arguments, either just 'help' but can also include a command name afterwards.
+        :param channel: The Discord.TextChannel that the message should be sent to.
+        """
         if len(words) == 1:
             embed = discord.Embed(title=f"{self.user.display_name} Commands Help",
                                   colour=self.user.colour, timestamp=datetime(year=2019, month=11, day=24))

@@ -7,8 +7,14 @@ import requests
 class DataFetcher:
     wanikani_users = {}
 
-    # Fetch a user's WaniKani data via the API from a resource.
     async def get_wanikani_data(self, user_id, resource, after_date=None):
+        """
+        Fetch a user's WaniKani data via the API from a resource.
+        :param user_id: The Discord.User.id that was used to as the dictionary key.
+        :param resource: The WaniKani API resource that needs to be called.
+        :param after_date: Optional argument for specifying since when you want to check the data.
+        :return: The JSON content of the response, otherwise None if the request fails.
+        """
         api_token = self.wanikani_users[user_id]['API_KEY']
         api_url_base = 'https://api.wanikani.com/v2/'
         headers = {'Content-Type': 'application/json',
@@ -26,8 +32,12 @@ class DataFetcher:
         else:
             return None
 
-    # Fetch a WaniKani User's data.
     async def fetch_wanikani_user_data(self, user_id):
+        """
+        Fetch a WaniKani User's data.
+        :param user_id: The Discord.User.id that was used to as the dictionary key.
+        :return: The data as a util.models.User object.
+        """
         user_data = await self.get_wanikani_data(user_id=user_id, resource='user')
         user = User(last_update=user_data['data_updated_at'], wk_id=user_data['data']['id'],
                     username=user_data['data']['username'], profile_url=user_data['data']['profile_url'],
@@ -38,8 +48,12 @@ class DataFetcher:
         self.wanikani_users[user_id]['USER_DATA'] = user
         return user
 
-    # Fetch a WaniKani User's Summary
     async def fetch_wanikani_user_summary(self, user_id):
+        """
+        Fetch a WaniKani User's Summary.
+        :param user_id: The Discord.User.id that was used to as the dictionary key.
+        :return: The data as a util.models.Summary object.
+        """
         summary_data = await self.get_wanikani_data(user_id=user_id, resource='summary')
         start = 0
         available_reviews = []
