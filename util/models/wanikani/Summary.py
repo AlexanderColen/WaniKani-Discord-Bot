@@ -1,11 +1,17 @@
-class Summary:
-    def __init__(self, last_update, available_lessons, available_reviews, upcoming_reviews):
-        self.last_update = last_update
-        self.available_lessons = available_lessons
-        self.available_reviews = available_reviews
-        self.upcoming_reviews = upcoming_reviews
+from typing import Any, List
 
-    def __str__(self):
+
+class Summary:
+    def __init__(self, last_update: str,
+                 available_lessons: List[Any],
+                 available_reviews: List[Any],
+                 upcoming_reviews: List[Any]) -> None:
+        self.last_update: str = last_update
+        self.available_lessons: List[Any] = available_lessons
+        self.available_reviews: List[Any] = available_reviews
+        self.upcoming_reviews: List[Any] = upcoming_reviews
+
+    def __str__(self) -> str:
         return f'Available lessons: {len(self.available_lessons)}' \
             f' - Available reviews: {len(self.available_reviews)}' \
             f' - Upcoming reviews: {[len(x) for x in self.upcoming_reviews]}'
