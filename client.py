@@ -41,7 +41,8 @@ class WaniKaniBotClient(discord.Client):
         Event method that gets called when the Discord client receives a new message.
         :param message: The Discord.Message that was received.
         """
-        if message.author.id == self.user.id:
+        # Ignore messages from bots.
+        if message.author.bot:
             return
 
         if message.content.startswith(self.prefix):
