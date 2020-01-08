@@ -10,7 +10,7 @@ import random
 
 
 class WaniKaniBotClient(discord.Client):
-    prefix: str = 'wk!'
+    prefixes: Dict[str, Any] = {'default': 'wk!'}
     command_count: int = 0
     descriptions: List[str] = None
     statuses: List[str] = None
@@ -45,19 +45,34 @@ class WaniKaniBotClient(discord.Client):
         if message.author.bot:
             return
 
-        if message.content.startswith(self.prefix):
+        # Find the appropriate prefix for a server.
+        prefix: str = self.prefixes['default']
+        if message.guild and message.guild.id in self.prefixes.keys():
+            prefix = self.prefixes[message.guild.id]
+
+        ###############
+        # MAINTENANCE #
+        ###############
+        if message.author.id != 209076181365030913 and message.content.startswith(prefix):
+            await message.channel.send(
+                content='Crabigator is being operated on, please try again later or contact the Lord of All.')
+            return
+
+        if message.content.startswith(prefix):
             print('\n{0}'.format(message))
             print('Message in {0.guild} - #{0.channel} from {0.author}: {0.content}'.format(message))
-            message.content = message.content.lstrip(self.prefix)
+            message.content = message.content[len(prefix):]
             # Prevent empty commands.
             if message.content:
                 self.command_count += 1
                 async with message.channel.typing():
                     try:
-                        await self.handle_command(message=message)
+                        await self.handle_command(message=message, prefix=prefix)
                     except discord.DiscordException as ex:
                         print(ex)
-                        await self.oopsie(channel=message.channel, attempted_command=message.content.split(' ')[0])
+                        await self.oopsie(channel=message.channel,
+                                          attempted_command=message.content.split(' ')[0],
+                                          prefix=prefix)
 
     @staticmethod
     async def send_image(channel: discord.TextChannel, image_name: str) -> None:
@@ -125,62 +140,89 @@ class WaniKaniBotClient(discord.Client):
             activity=discord.Game(f'{random.choice(self.statuses)}')
         )
 
-    async def unknown_wanikani_user(self, channel: discord.TextChannel) -> None:
+    @staticmethod
+    async def unknown_wanikani_user(channel: discord.TextChannel, prefix: str) -> None:
         """
         Sends an error message when a WaniKani user wasn't registered yet with Crabigator.
         :param channel: The Discord.TextChannel that the message should be sent to.
+        :param prefix: The prefix used for the Crabigator.
         """
         await channel.send(
             content=f'Crabigator does not know this person. '
-            f'Please use `{self.prefix}adduser <WANIKANI_API_V2_TOKEN>` and try again.')
+            f'Please use `{prefix}adduser <WANIKANI_API_V2_TOKEN>` and try again.')
 
-    async def oopsie(self, channel: discord.TextChannel, attempted_command: str) -> None:
+    @staticmethod
+    async def oopsie(channel: discord.TextChannel, attempted_command: str, prefix: str) -> None:
         """
         Sends a generic error message if something went wrong.
         :param channel: The Discord.TextChannel that the message should be sent to.
         :param attempted_command: The Crabigator command that was attempted.
+        :param prefix: The prefix used for the Crabigator.
         """
         await channel.send(
-            content=f'Crabigator got too caught up studying and failed to handle `{self.prefix}{attempted_command}`. '
+            content=f'Crabigator got too caught up studying and failed to handle `{prefix}{attempted_command}`. '
             f'Please try again.')
 
-    async def handle_command(self, message: discord.Message) -> None:
+    async def handle_command(self, message: discord.Message, prefix: str) -> None:
         """
         Handle requests (commands) given to the Crabigator.
         :param message: The Discord.Message that was received minus the prefix.
+        :param prefix: The prefix used for the Crabigator.
         """
         words: List[str] = message.content.split(' ')
         command: str = words[0].lower()
 
         # Changes the prefix for the almighty Crabigator.
         if command in ['prefix']:
+            # Only available in servers.
+            if not message.guild:
+                await message.channel.send(content="_Crabigator doesn't seem to listen to DM prefix requests..._")
+                return
+
             if len(words) == 1:
                 await message.channel.send(
                     content=f"Don't treat the prefix like your Kanji and forget it! "
-                    f'Example usage: `{self.prefix}prefix <CHAR>`')
+                    f'Example usage: `{prefix}prefix <CHAR>`')
             elif len(words) > 2:
                 await message.channel.send(
                     content=f'The Crabigator does not allow spaces in the prefix!')
             else:
-                self.prefix = words[1]
-                await message.channel.send(
-                    content=f'The Crabigator became more omnipotent by changing to `{self.prefix}`!')
+                # Only server administrators should be allowed to touch the prefix.
+                is_admin = False
+                for r in message.author.roles:
+                    # Bitwise AND operator can check that, for more information see the Discord API documentation at
+                    # https://discordapp.com/developers/docs/topics/permissions
+                    if (r.permissions.value & 0x00000008) == 0x00000008:
+                        is_admin = True
+
+                if is_admin:
+                    self.prefixes[message.guild.id] = words[1]
+                    await message.channel.send(
+                        content=f'The Crabigator became more omnipotent by changing to `{words[1]}`!')
+                else:
+                    await message.channel.send(
+                        content=f'Only server administrators are allowed to change the prefix.')
         # Registers a WaniKani User for API calls.
         elif command in ['adduser', 'addme']:
-            if len(words) == 1:
-                await message.channel.send(
-                    content=f'Improper command usage. '
-                    f'Example usage: `{self.prefix}adduser <WANIKANI_API_V2_TOKEN>`')
-            elif len(words[1]) != 36 or '-' not in words[1]:
-                await message.delete()
-                await message.channel.send(
-                    content='API token is invalid! '
-                            'Make sure there are no dangling characters on either side!')
+            if message.guild:
+                await message.channel.send(content="Let's do this in private, shall we? _(DM Crabigator instead)_")
             else:
-                self._dataFetcher.wanikani_users[message.author.id] = {'API_KEY': words[1]}
-                await message.delete()
-                await message.channel.send(
-                    content=f'Crabigator has started watching <@{message.author.id}> closely...')
+                if len(words) == 1:
+                    await message.channel.send(
+                        content=f'Improper command usage. '
+                        f'Example usage: `{prefix}adduser <WANIKANI_API_V2_TOKEN>`')
+                elif len(words[1]) != 36 or '-' not in words[1]:
+                    await message.channel.send(
+                        content='API token is invalid! '
+                                'Make sure there are no dangling characters on either side!')
+                else:
+                    if message.author.id in self._dataFetcher.wanikani_users.keys():
+                        await message.channel.send(
+                            content='Your API key is already registered, did you mean `removeuser`?')
+                        return
+                    self._dataFetcher.wanikani_users[message.author.id] = {'API_KEY': words[1]}
+                    await message.channel.send(
+                        content=f'Crabigator has started watching <@{message.author.id}> closely...')
         # Deregisters a WaniKani User for API calls.
         elif command in ['removeuser', 'removeme']:
             try:
@@ -196,13 +238,13 @@ class WaniKaniBotClient(discord.Client):
                     content=f'Crabigator does not know this person. I cannot delete what I do not know. {emoji}')
         # Fetch a WaniKani User's overall stats.
         elif command in ['user', 'userstats']:
-            await self.get_user_stats(words=words, channel=message.channel, author=message.author)
+            await self.get_user_stats(words=words, channel=message.channel, author=message.author, prefix=prefix)
         # Fetch a WaniKani User's daily stats.
         elif command in ['daily', 'dailyoverview', 'dailystatus', 'dailystats']:
-            await self.get_daily_stats(words=words, channel=message.channel, author=message.author)
+            await self.get_daily_stats(words=words, channel=message.channel, author=message.author, prefix=prefix)
         # Fetch a WaniKani User's leveling statistics.
         elif command in ['levelstats', 'levelstats', 'leveling', 'levelingstatus', 'levelingstats']:
-            await self.get_leveling_stats(words=words, channel=message.channel, author=message.author)
+            await self.get_leveling_stats(words=words, channel=message.channel, author=message.author, prefix=prefix)
         # Congratulate someone.
         elif command in ['congratulations', 'congrats', 'grats', 'gratz', 'gz', 'gj', 'goodjob']:
             await self.send_image(channel=message.channel, image_name='img/concrabs.png')
@@ -219,13 +261,13 @@ class WaniKaniBotClient(discord.Client):
         elif command in ['ballot_box_with_check', ':ballot_box_with_check:', '☑']:
             await self.send_image(channel=message.channel, image_name='img/superior_checkmark.png')
         # Provides help with this Bot's commands.
-        elif command in ['help']:
-            await self.get_help(words=words, channel=message.channel)
+        elif command in ['help', 'h', 'commands']:
+            await self.get_help(words=words, channel=message.channel, prefix=prefix)
         # Unknown Command.
         else:
             await message.channel.send(
                 content=f'Crabigator has yet to learn this ~~kanji~~ command. '
-                f'Refer to `{self.prefix}help` to see what I can do!')
+                f'Refer to `{prefix}help` to see what I can do!')
 
     async def get_user_data_model(self, user_id: int) -> User:
         """
@@ -237,12 +279,13 @@ class WaniKaniBotClient(discord.Client):
         return self._dataFetcher.wanikani_users[user_id]['USER_DATA']
 
     async def get_user_stats(self, words: List[str], channel: discord.TextChannel,
-                             author: discord.member.Member) -> None:
+                             author: discord.member.Member, prefix: str) -> None:
         """
         Fetches and displays a WaniKani user.
         :param words: Array of arguments, if there is a second one it is a specific Discord.User.
         :param channel: The Discord.TextChannel that the message should be sent to.
         :param author: The Discord.User that requested the statistics.
+        :param prefix: The prefix used for the Crabigator.
         """
         if len(words) == 1:
             if author.id in self._dataFetcher.wanikani_users.keys():
@@ -259,15 +302,16 @@ class WaniKaniBotClient(discord.Client):
                 embed.add_field(name='Reviews available:', value=str(len(summary.available_reviews)), inline=False)
                 await self.send_embed(channel=channel, embed=embed)
             else:
-                await self.unknown_wanikani_user(channel=channel)
+                await self.unknown_wanikani_user(channel=channel, prefix=prefix)
 
     async def get_daily_stats(self, words: List[str], channel: discord.TextChannel,
-                              author: discord.member.Member) -> None:
+                              author: discord.member.Member, prefix: str) -> None:
         """
         Fetches the user's daily statistics and returns them neatly formatted.
         :param words: Array of arguments, if there is a second one it is a specific Discord.User.
         :param channel: The Discord.TextChannel that the message should be sent to.
         :param author: The Discord.User that requested the statistics.
+        :param prefix: The prefix used for the Crabigator.
         """
         if len(words) == 1:
             try:
@@ -313,14 +357,16 @@ class WaniKaniBotClient(discord.Client):
                                 inline=False)
                 await self.send_embed(channel=channel, embed=embed)
             except KeyError:
-                await self.unknown_wanikani_user(channel=channel)
+                await self.unknown_wanikani_user(channel=channel, prefix=prefix)
 
-    async def get_leveling_stats(self, words: List[str], channel: discord.TextChannel, author: discord.member.Member):
+    async def get_leveling_stats(self, words: List[str], channel: discord.TextChannel,
+                                 author: discord.member.Member, prefix: str):
         """
         Fetches the leveling statistics and returns them neatly formatted.
         :param words: Array of arguments, if there is a second one it is a specific Discord.User.
         :param channel: The Discord.TextChannel that the message should be sent to.
         :param author: The Discord.User that requested the statistics.
+        :param prefix: The prefix used for the Crabigator.
         """
         if len(words) == 1:
             try:
@@ -334,13 +380,14 @@ class WaniKaniBotClient(discord.Client):
                     content=f"Compiling your data took forever, so I took a nap instead. "
                     f"Just use https://www.wkstats.com/ for now.")
             except KeyError:
-                await self.unknown_wanikani_user(channel=channel)
+                await self.unknown_wanikani_user(channel=channel, prefix=prefix)
 
-    async def get_help(self, words: List[str], channel: discord.TextChannel):
+    async def get_help(self, words: List[str], channel: discord.TextChannel, prefix: str):
         """
         Shows the help menu with all the known commands or the specified command in the arguments.
         :param words: Array of arguments, either just 'help' but can also include a command name afterwards.
         :param channel: The Discord.TextChannel that the message should be sent to.
+        :param prefix: The prefix used for the Crabigator.
         """
         if len(words) == 1:
             embed: discord.Embed = discord.Embed(title=f"{self.user.display_name} Commands Help",
@@ -350,34 +397,34 @@ class WaniKaniBotClient(discord.Client):
             embed.set_author(name=self.user.display_name, icon_url=self.user.avatar_url,
                              url='https://github.com/AlexanderColen/WaniKaniDiscordBot')
             # Add all the custom embed fields.
-            embed.add_field(name=f'{self.prefix}help',
+            embed.add_field(name=f'{prefix}help',
                             value='Displays this embedded message.',
                             inline=False)
-            embed.add_field(name=f'{self.prefix}help `<COMMAND_NAME>`',
+            embed.add_field(name=f'{prefix}help `<COMMAND_NAME>`',
                             value='Displays more info for the specified command.',
                             inline=False)
-            embed.add_field(name=f'{self.prefix}adduser `<WANIKANI_API_V2_TOKEN>`',
+            embed.add_field(name=f'{prefix}adduser `<WANIKANI_API_V2_TOKEN>`',
                             value='Registers a WaniKani user to allow API usage.',
                             inline=False)
-            embed.add_field(name=f'{self.prefix}removeuser',
+            embed.add_field(name=f'{prefix}removeuser',
                             value="Removes a user's data to no longer allow API usage.",
                             inline=False)
-            embed.add_field(name=f'{self.prefix}user',
+            embed.add_field(name=f'{prefix}user',
                             value="Displays the WaniKani user's overall statistics.",
                             inline=False)
-            embed.add_field(name=f'{self.prefix}levelstats',
+            embed.add_field(name=f'{prefix}levelstats',
                             value="Displays the WaniKani user's leveling statistics.",
                             inline=False)
-            embed.add_field(name=f'{self.prefix}daily',
+            embed.add_field(name=f'{prefix}daily',
                             value="Displays the WaniKani user's daily statistics.",
                             inline=False)
-            embed.add_field(name=f'{self.prefix}congratulations',
+            embed.add_field(name=f'{prefix}congratulations',
                             value=':tada:',
                             inline=True)
-            embed.add_field(name=f'{self.prefix}anger',
+            embed.add_field(name=f'{prefix}anger',
                             value=':anger:',
                             inline=True)
-            embed.add_field(name=f'{self.prefix}love',
+            embed.add_field(name=f'{prefix}love',
                             value=':heart:',
                             inline=True)
             await self.send_embed(channel=channel, embed=embed)
@@ -385,7 +432,7 @@ class WaniKaniBotClient(discord.Client):
             if words[1] == 'help':
                 await self.send_image(channel=channel, image_name='img/yodawg.png')
             else:
-                title: str = f"{self.user.display_name}'s `{self.prefix}{words[1]}` Command Assistance"
+                title: str = f"{self.user.display_name}'s `{prefix}{words[1]}` Command Assistance"
                 embed: discord.Embed = discord.Embed(title=title,
                                                      colour=self.user.colour,
                                                      timestamp=datetime(year=2019, month=11, day=24))
