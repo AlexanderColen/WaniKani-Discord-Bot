@@ -56,10 +56,12 @@ class WaniKaniBotClient(discord.Client):
         ###############
         # MAINTENANCE #
         ###############
+        """
         if message.author.id != 209076181365030913 and message.content.startswith(prefix):
             await message.channel.send(
                 content='Crabigator is being operated on, please try again later or contact the Lord of All.')
             return
+        """
 
         if message.content.startswith(prefix):
             print('\n{0}'.format(message))
