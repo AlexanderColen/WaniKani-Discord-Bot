@@ -10,7 +10,7 @@ class DataStorage:
         self.client = MongoClient("mongodb://localhost:27017/")
         self.db = self.client['wanikani-bot']
 
-    def register_api_user(self, user_id: int, api_key: str):
+    def register_api_user(self, user_id: int, api_key: str) -> None:
         """
         Inserts a new WaniKani user with their API key into the database.
         :param user_id: The Discord Member ID.
@@ -37,7 +37,7 @@ class DataStorage:
         users = self.db['wanikani-users']
         return users.delete_one({"_id": user_id}).deleted_count
 
-    def insert_guild_prefix(self, guild_id: int, prefix: str):
+    def insert_guild_prefix(self, guild_id: int, prefix: str) -> None:
         """
         Inserts a new Discord Guild with their prefix into the database.
         :param guild_id: The Discord Guild ID.

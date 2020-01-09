@@ -49,9 +49,10 @@ class WaniKaniBotClient(discord.Client):
 
         # Find the appropriate prefix for a server.
         prefix: str = 'wk!'
-        found_guild = self._dataStorage.find_guild_prefix(guild_id=message.guild.id)
-        if message.guild and found_guild:
-            prefix = found_guild['prefix']
+        if message.guild:
+            found_guild = self._dataStorage.find_guild_prefix(guild_id=message.guild.id)
+            if found_guild:
+                prefix = found_guild['prefix']
 
         ###############
         # MAINTENANCE #
