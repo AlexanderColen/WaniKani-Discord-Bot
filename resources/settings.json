@@ -1,4 +1,5 @@
 {
   "CRABIGATOR_VERSION": "0.2.2",
-  "DISCORD_BOT_TOKEN": "EMPTY"
+  "DISCORD_BOT_TOKEN": "EMPTY",
+  "MONGO_DB_URI": "mongodb://localhost:27017/"
 }

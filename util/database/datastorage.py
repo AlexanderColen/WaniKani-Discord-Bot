@@ -1,5 +1,6 @@
-from pymongo import MongoClient, errors
+from pymongo import MongoClient
 from typing import Dict, Any
+import json
 
 
 class DataStorage:
@@ -7,8 +8,13 @@ class DataStorage:
     db = None
 
     def __init__(self):
-        self.client = MongoClient("mongodb://localhost:27017/")
-        self.db = self.client['wanikani-bot']
+        with open('resources/settings.json') as json_data_file:
+            data: Dict[str, Any] = json.load(json_data_file)
+            if data["MONGO_DB_URI"]:
+                self.client = MongoClient(data["MONGO_DB_URI"])
+                self.db = self.client['wanikani-bot']
+            else:
+                print("Settings.json is corrupt. Please redownload the original file to fix this.")
 
     def register_api_user(self, user_id: int, api_key: str) -> None:
         """

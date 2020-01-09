@@ -54,10 +54,11 @@ class WaniKaniBotClient(discord.Client):
             if found_guild:
                 prefix = found_guild['prefix']
 
-        ###############
-        # MAINTENANCE #
-        ###############
+        #############################
+        # UNCOMMENT FOR MAINTENANCE #
+        #############################
         """
+        # Replace the ID to your Discord User ID to allow access only for you.
         if message.author.id != 209076181365030913 and message.content.startswith(prefix):
             await message.channel.send(
                 content='Crabigator is being operated on, please try again later or contact the Lord of All.')
@@ -74,7 +75,7 @@ class WaniKaniBotClient(discord.Client):
                 async with message.channel.typing():
                     try:
                         await self.handle_command(message=message, prefix=prefix)
-                    except discord.DiscordException as ex:
+                    except Exception as ex:
                         print(ex)
                         await self.oopsie(channel=message.channel,
                                           attempted_command=message.content.split(' ')[0],
@@ -168,7 +169,7 @@ class WaniKaniBotClient(discord.Client):
         """
         await channel.send(
             content=f'Crabigator got too caught up studying and failed to handle `{prefix}{attempted_command}`. '
-            f'Please try again.')
+            f'Please notify my Overlord.')
 
     async def handle_command(self, message: discord.Message, prefix: str) -> None:
         """
@@ -299,7 +300,14 @@ class WaniKaniBotClient(discord.Client):
         if len(words) == 1:
             return author.id
         elif len(words) == 2:
-            return int(words[1].lstrip('<@!').rstrip('>'))
+            # User got tagged with <@!NUMBER>
+            if words[1].startswith('<@!') and words[1].endswith('>'):
+                return int(words[1].lstrip('<@!').rstrip('>'))
+            else:
+                try:
+                    return int(words[1])
+                except TypeError:
+                    return -1
         return -1
 
     async def get_user_stats(self, words: List[str], channel: discord.TextChannel,
@@ -312,6 +320,11 @@ class WaniKaniBotClient(discord.Client):
         :param prefix: The prefix used for the Crabigator.
         """
         user_id = self.extract_user_id(words=words, author=author)
+        if user_id == -1:
+            await channel.send(content='Please tag **one** Discord User,'
+                                       ' or provide **one** Discord User ID with this command.')
+            return
+
         if not self._dataStorage.find_api_user(user_id=user_id):
             await self.unknown_wanikani_user(channel=channel, prefix=prefix)
             return
@@ -342,6 +355,11 @@ class WaniKaniBotClient(discord.Client):
         :param prefix: The prefix used for the Crabigator.
         """
         user_id = self.extract_user_id(words=words, author=author)
+        if user_id == -1:
+            await channel.send(content='Please tag **one** Discord User,'
+                                       ' or provide **one** Discord User ID with this command.')
+            return
+
         if not self._dataStorage.find_api_user(user_id=user_id):
             await self.unknown_wanikani_user(channel=channel, prefix=prefix)
             return
@@ -378,7 +396,8 @@ class WaniKaniBotClient(discord.Client):
         completed_lessons: int = 0
         for entry in lesson_data['data']:
             # Parse the started_at date from the entry.
-            if date == entry['data']['started_at'][0:entry['data']['started_at'].index('T')]:
+            if entry['data']['started_at'] \
+                    and date == entry['data']['started_at'][0:entry['data']['started_at'].index('T')]:
                 completed_lessons += 1
         embed.add_field(name='Completed Lessons',
                         value=str(completed_lessons),
@@ -401,6 +420,11 @@ class WaniKaniBotClient(discord.Client):
         :param prefix: The prefix used for the Crabigator.
         """
         user_id = self.extract_user_id(words=words, author=author)
+        if user_id == -1:
+            await channel.send(content='Please tag **one** Discord User,'
+                                       ' or provide **one** Discord User ID with this command.')
+            return
+
         if not self._dataStorage.find_api_user(user_id=user_id):
             await self.unknown_wanikani_user(channel=channel, prefix=prefix)
             return
