@@ -1,5 +1,6 @@
 from .models.wanikani.User import User
 from .models.wanikani.Summary import Summary
+from .database.datastorage import DataStorage
 from typing import Any, Dict, List
 import json
 import requests
@@ -7,6 +8,10 @@ import requests
 
 class DataFetcher:
     wanikani_users = {}
+    _dataStorage = None
+
+    def __init__(self):
+        self._dataStorage = DataStorage()
 
     async def get_wanikani_data(self, user_id: int, resource: str, after_date: str = None):
         """
@@ -16,7 +21,7 @@ class DataFetcher:
         :param after_date: Optional argument for specifying since when you want to check the data.
         :return: The JSON content of the response, otherwise None if the request fails.
         """
-        api_token = self.wanikani_users[user_id]['API_KEY']
+        api_token = self._dataStorage.find_api_user(user_id=user_id)['API_KEY']
         api_url_base = 'https://api.wanikani.com/v2/'
         headers = {'Content-Type': 'application/json',
                    'Authorization': 'Bearer {0}'.format(api_token)}

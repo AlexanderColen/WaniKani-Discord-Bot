@@ -1,4 +1,5 @@
 from util.asynctimer import Scheduler
+from util.database.datastorage import DataStorage
 from util.datafetcher import DataFetcher
 from util.models.wanikani.Level_Progress import LevelProgress
 from util.models.wanikani.Summary import Summary
@@ -10,16 +11,17 @@ import random
 
 
 class WaniKaniBotClient(discord.Client):
-    prefixes: Dict[str, Any] = {'default': 'wk!'}
     command_count: int = 0
     descriptions: List[str] = None
     statuses: List[str] = None
     _dataFetcher: DataFetcher = None
+    _dataStorage: DataStorage = None
     _scheduler: Scheduler = None
 
     def __init__(self) -> None:
         super(WaniKaniBotClient, self).__init__()
         self._dataFetcher = DataFetcher()
+        self._dataStorage = DataStorage()
         self._scheduler = Scheduler()
         self.descriptions = self.load_text_from_file_to_array(filename='resources/descriptions.txt')
         self.statuses = self.load_text_from_file_to_array(filename='resources/statuses.txt')
@@ -46,9 +48,10 @@ class WaniKaniBotClient(discord.Client):
             return
 
         # Find the appropriate prefix for a server.
-        prefix: str = self.prefixes['default']
-        if message.guild and message.guild.id in self.prefixes.keys():
-            prefix = self.prefixes[message.guild.id]
+        prefix: str = 'wk!'
+        found_guild = self._dataStorage.find_guild_prefix(guild_id=message.guild.id)
+        if message.guild and found_guild:
+            prefix = found_guild['prefix']
 
         ###############
         # MAINTENANCE #
@@ -122,13 +125,14 @@ class WaniKaniBotClient(discord.Client):
     async def fetch_emoji(guild: discord.Guild, emoji_array: List[str]) -> str:
         """
         Find a custom emoji from a Discord.Guild containing one of the words in the given array.
-        :param guild: The Discord.Guild that should be searches.
+        :param guild: The Discord.Guild that should be searched. Can be None.
         :param emoji_array: The array of words that should be searched for.
         :return: The first hit from the emoji_array properly formatted to be sent. Empty string if nothing was found.
         """
-        for em in await guild.fetch_emojis():
-            if any(e in em.name.lower() for e in emoji_array):
-                return f'<:{em.name}:{em.id}>'
+        if guild:
+            for em in await guild.fetch_emojis():
+                if any(e in em.name.lower() for e in emoji_array):
+                    return f'<:{em.name}:{em.id}>'
 
         return ''
 
@@ -196,7 +200,7 @@ class WaniKaniBotClient(discord.Client):
                         is_admin = True
 
                 if is_admin:
-                    self.prefixes[message.guild.id] = words[1]
+                    self._dataStorage.insert_guild_prefix(guild_id=message.guild.id, prefix=words[1])
                     await message.channel.send(
                         content=f'The Crabigator became more omnipotent by changing to `{words[1]}`!')
                 else:
@@ -216,24 +220,25 @@ class WaniKaniBotClient(discord.Client):
                         content='API token is invalid! '
                                 'Make sure there are no dangling characters on either side!')
                 else:
-                    if message.author.id in self._dataFetcher.wanikani_users.keys():
+                    if self._dataStorage.find_api_user(user_id=message.author.id):
                         await message.channel.send(
                             content='Your API key is already registered, did you mean `removeuser`?')
                         return
-                    self._dataFetcher.wanikani_users[message.author.id] = {'API_KEY': words[1]}
+                    self._dataStorage.register_api_user(user_id=message.author.id, api_key=words[1])
+                    # Initialize the key for future use.
+                    self._dataFetcher.wanikani_users[message.author.id] = {}
                     await message.channel.send(
                         content=f'Crabigator has started watching <@{message.author.id}> closely...')
         # Deregisters a WaniKani User for API calls.
         elif command in ['removeuser', 'removeme']:
-            try:
-                self._dataFetcher.wanikani_users.pop(message.author.id)
+            if self._dataStorage.remove_api_user(user_id=message.author.id):
                 emoji: discord.Emoji = await self.fetch_emoji(guild=message.guild,
                                                               emoji_array=['baka', 'pout', 'sad', 'cry'])
                 await message.channel.send(
                     content=f"The Cult of the Crabigator didn't want you in the first place. {emoji}")
-            except KeyError:
+            else:
                 emoji: discord.Emoji = await self.fetch_emoji(guild=message.guild,
-                                                              emoji_array=['thinking'])
+                                                              emoji_array=['thinking', 'think', 'confused', 'shrug'])
                 await message.channel.send(
                     content=f'Crabigator does not know this person. I cannot delete what I do not know. {emoji}')
         # Fetch a WaniKani User's overall stats.
@@ -274,9 +279,25 @@ class WaniKaniBotClient(discord.Client):
         Get the user_data field from the DataFetcher as a User object.
         :param user_id: The Discord.User.id that was used to as the dictionary key.
         """
+        if user_id not in self._dataFetcher.wanikani_users.keys():
+            self._dataFetcher.wanikani_users[user_id] = {}
         if 'USER_DATA' not in self._dataFetcher.wanikani_users[user_id]:
             await self._dataFetcher.fetch_wanikani_user_data(user_id=user_id)
         return self._dataFetcher.wanikani_users[user_id]['USER_DATA']
+
+    @staticmethod
+    def extract_user_id(words: List[str], author: discord.member.Member) -> int:
+        """
+        Extracts the Discord.User.id from the author or message if applicable. Returns -1 if no match.
+        :param words: The string message that was sent.
+        :param author: The Discord.User author of the message.
+        :return: The ID of the author or of the tagged user. -1 if the message is too long (>2 words).
+        """
+        if len(words) == 1:
+            return author.id
+        elif len(words) == 2:
+            return int(words[1].lstrip('<@!').rstrip('>'))
+        return -1
 
     async def get_user_stats(self, words: List[str], channel: discord.TextChannel,
                              author: discord.member.Member, prefix: str) -> None:
@@ -287,22 +308,26 @@ class WaniKaniBotClient(discord.Client):
         :param author: The Discord.User that requested the statistics.
         :param prefix: The prefix used for the Crabigator.
         """
-        if len(words) == 1:
-            if author.id in self._dataFetcher.wanikani_users.keys():
-                user: User = await self._dataFetcher.fetch_wanikani_user_data(user_id=author.id)
-                embed: discord.Embed = discord.Embed(title='WaniKani Profile', url=user.profile_url,
-                                                     colour=author.colour, timestamp=datetime.now())
-                embed.set_thumbnail(url='https://cdn.wanikani.com/default-avatar-300x300-20121121.png')
-                embed.set_author(name=user.username, icon_url=author.avatar_url,
-                                 url=user.profile_url)
-                summary: Summary = await self._dataFetcher.fetch_wanikani_user_summary(user_id=author.id)
-                # Add all the custom embed fields.
-                embed.add_field(name='Level', value=user.level, inline=False)
-                embed.add_field(name='Lessons available:', value=str(len(summary.available_lessons)), inline=False)
-                embed.add_field(name='Reviews available:', value=str(len(summary.available_reviews)), inline=False)
-                await self.send_embed(channel=channel, embed=embed)
-            else:
-                await self.unknown_wanikani_user(channel=channel, prefix=prefix)
+        user_id = self.extract_user_id(words=words, author=author)
+        if not self._dataStorage.find_api_user(user_id=user_id):
+            await self.unknown_wanikani_user(channel=channel, prefix=prefix)
+            return
+
+        if user_id not in self._dataFetcher.wanikani_users.keys():
+            self._dataFetcher.wanikani_users[user_id] = {}
+
+        user: User = await self._dataFetcher.fetch_wanikani_user_data(user_id=user_id)
+        embed: discord.Embed = discord.Embed(title='WaniKani Profile', url=user.profile_url,
+                                             colour=author.colour, timestamp=datetime.now())
+        embed.set_thumbnail(url='https://cdn.wanikani.com/default-avatar-300x300-20121121.png')
+        embed.set_author(name=user.username, icon_url=author.avatar_url,
+                         url=user.profile_url)
+        summary: Summary = await self._dataFetcher.fetch_wanikani_user_summary(user_id=user_id)
+        # Add all the custom embed fields.
+        embed.add_field(name='Level', value=user.level, inline=False)
+        embed.add_field(name='Lessons available:', value=str(len(summary.available_lessons)), inline=False)
+        embed.add_field(name='Reviews available:', value=str(len(summary.available_reviews)), inline=False)
+        await self.send_embed(channel=channel, embed=embed)
 
     async def get_daily_stats(self, words: List[str], channel: discord.TextChannel,
                               author: discord.member.Member, prefix: str) -> None:
@@ -313,51 +338,55 @@ class WaniKaniBotClient(discord.Client):
         :param author: The Discord.User that requested the statistics.
         :param prefix: The prefix used for the Crabigator.
         """
-        if len(words) == 1:
-            try:
-                user: User = await self.get_user_data_model(user_id=author.id)
-                date: str = datetime.today().strftime('%Y-%m-%d')
-                lesson_data: Dict[str, Any] = await self._dataFetcher.get_wanikani_data(user_id=author.id,
-                                                                                        resource='assignments',
-                                                                                        after_date=date)
-                review_data: Dict[str, Any] = await self._dataFetcher.get_wanikani_data(user_id=author.id,
-                                                                                        resource='reviews',
-                                                                                        after_date=date)
-                summary_data: Summary = await self._dataFetcher.fetch_wanikani_user_summary(user_id=author.id)
-                embed: discord.Embed = discord.Embed(title='Daily Overview',
-                                                     colour=author.colour,
-                                                     timestamp=datetime.now())
-                embed.set_thumbnail(url='https://cdn.wanikani.com/default-avatar-300x300-20121121.png')
-                embed.set_author(name=user.username, icon_url=author.avatar_url,
-                                 url=user.profile_url)
-                # Add all the custom embed fields.
-                embed.add_field(name='Completed Reviews',
-                                value=review_data['total_count'],
-                                inline=False)
-                """
-                The total count for lessons in the /assignments resource is incorrect.
-                Instead of only showing the newest lessons since the ?updated_after query,
-                it shows 'lessons' that already have high srs_stages.
-                So to get the actual amount we need to loop through and parse the ones started after the current date.
-                So for example started_at being 2019-05-24 for the completed lessons on may 24th 2019.
-                """
-                completed_lessons: int = 0
-                for entry in lesson_data['data']:
-                    # Parse the started_at date from the entry.
-                    if date == entry['data']['started_at'][0:entry['data']['started_at'].index('T')]:
-                        completed_lessons += 1
-                embed.add_field(name='Completed Lessons',
-                                value=str(completed_lessons),
-                                inline=False)
-                embed.add_field(name='Reviews available:',
-                                value=str(len(summary_data.available_reviews)),
-                                inline=False)
-                embed.add_field(name='Lessons available:',
-                                value=str(len(summary_data.available_lessons)),
-                                inline=False)
-                await self.send_embed(channel=channel, embed=embed)
-            except KeyError:
-                await self.unknown_wanikani_user(channel=channel, prefix=prefix)
+        user_id = self.extract_user_id(words=words, author=author)
+        if not self._dataStorage.find_api_user(user_id=user_id):
+            await self.unknown_wanikani_user(channel=channel, prefix=prefix)
+            return
+
+        if user_id not in self._dataFetcher.wanikani_users.keys():
+            self._dataFetcher.wanikani_users[user_id] = {}
+
+        user: User = await self.get_user_data_model(user_id=author.id)
+        date: str = datetime.today().strftime('%Y-%m-%d')
+        lesson_data: Dict[str, Any] = await self._dataFetcher.get_wanikani_data(user_id=user_id,
+                                                                                resource='assignments',
+                                                                                after_date=date)
+        review_data: Dict[str, Any] = await self._dataFetcher.get_wanikani_data(user_id=user_id,
+                                                                                resource='reviews',
+                                                                                after_date=date)
+        summary_data: Summary = await self._dataFetcher.fetch_wanikani_user_summary(user_id=user_id)
+        embed: discord.Embed = discord.Embed(title='Daily Overview',
+                                             colour=author.colour,
+                                             timestamp=datetime.now())
+        embed.set_thumbnail(url='https://cdn.wanikani.com/default-avatar-300x300-20121121.png')
+        embed.set_author(name=user.username, icon_url=author.avatar_url,
+                         url=user.profile_url)
+        # Add all the custom embed fields.
+        embed.add_field(name='Completed Reviews',
+                        value=review_data['total_count'],
+                        inline=False)
+        """
+        The total count for lessons in the /assignments resource is incorrect.
+        Instead of only showing the newest lessons since the ?updated_after query,
+        it shows 'lessons' that already have high srs_stages.
+        So to get the actual amount we need to loop through and parse the ones started after the current date.
+        So for example started_at being 2019-05-24 for the completed lessons on may 24th 2019.
+        """
+        completed_lessons: int = 0
+        for entry in lesson_data['data']:
+            # Parse the started_at date from the entry.
+            if date == entry['data']['started_at'][0:entry['data']['started_at'].index('T')]:
+                completed_lessons += 1
+        embed.add_field(name='Completed Lessons',
+                        value=str(completed_lessons),
+                        inline=False)
+        embed.add_field(name='Reviews available:',
+                        value=str(len(summary_data.available_reviews)),
+                        inline=False)
+        embed.add_field(name='Lessons available:',
+                        value=str(len(summary_data.available_lessons)),
+                        inline=False)
+        await self.send_embed(channel=channel, embed=embed)
 
     async def get_leveling_stats(self, words: List[str], channel: discord.TextChannel,
                                  author: discord.member.Member, prefix: str):
@@ -368,19 +397,20 @@ class WaniKaniBotClient(discord.Client):
         :param author: The Discord.User that requested the statistics.
         :param prefix: The prefix used for the Crabigator.
         """
-        if len(words) == 1:
-            try:
-                user: User = await self.get_user_data_model(user_id=author.id)
-                progression: Dict[str, Any] = await self._dataFetcher.get_wanikani_data(user_id=author.id,
-                                                                                        resource='level_progressions')
-                # Add found data to user object.
-                for level_progress in progression['data']:
-                    user.level_progressions.append(level_progress)
-                await channel.send(
-                    content=f"Compiling your data took forever, so I took a nap instead. "
-                    f"Just use https://www.wkstats.com/ for now.")
-            except KeyError:
-                await self.unknown_wanikani_user(channel=channel, prefix=prefix)
+        user_id = self.extract_user_id(words=words, author=author)
+        if not self._dataStorage.find_api_user(user_id=user_id):
+            await self.unknown_wanikani_user(channel=channel, prefix=prefix)
+            return
+
+        user: User = await self.get_user_data_model(user_id=user_id)
+        progression: Dict[str, Any] = await self._dataFetcher.get_wanikani_data(user_id=user_id,
+                                                                                resource='level_progressions')
+        # Add found data to user object.
+        for level_progress in progression['data']:
+            user.level_progressions.append(level_progress)
+        await channel.send(
+            content=f"Compiling your data took forever, so I took a nap instead. "
+            f"Just use https://www.wkstats.com/ for now.")
 
     async def get_help(self, words: List[str], channel: discord.TextChannel, prefix: str):
         """
@@ -404,19 +434,22 @@ class WaniKaniBotClient(discord.Client):
                             value='Displays more info for the specified command.',
                             inline=False)
             embed.add_field(name=f'{prefix}adduser `<WANIKANI_API_V2_TOKEN>`',
-                            value='Registers a WaniKani user to allow API usage.',
+                            value='Registers a WaniKani user to allow API usage. **ONLY WORKS IN DIRECT MESSAGES!**',
                             inline=False)
             embed.add_field(name=f'{prefix}removeuser',
                             value="Removes a user's data to no longer allow API usage.",
                             inline=False)
             embed.add_field(name=f'{prefix}user',
-                            value="Displays the WaniKani user's overall statistics.",
+                            value="Displays the WaniKani user's overall statistics."
+                                  "Optionally you can target another user.",
                             inline=False)
             embed.add_field(name=f'{prefix}levelstats',
-                            value="Displays the WaniKani user's leveling statistics.",
+                            value="Displays the WaniKani user's leveling statistics. "
+                                  "Optionally you can target another user.",
                             inline=False)
             embed.add_field(name=f'{prefix}daily',
-                            value="Displays the WaniKani user's daily statistics.",
+                            value="Displays the WaniKani user's daily statistics."
+                                  "Optionally you can target another user.",
                             inline=False)
             embed.add_field(name=f'{prefix}congratulations',
                             value=':tada:',
