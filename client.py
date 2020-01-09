@@ -336,7 +336,7 @@ class WaniKaniBotClient(discord.Client):
         embed: discord.Embed = discord.Embed(title='WaniKani Profile', url=user.profile_url,
                                              colour=author.colour, timestamp=datetime.now())
         embed.set_thumbnail(url='https://cdn.wanikani.com/default-avatar-300x300-20121121.png')
-        embed.set_author(name=user.username, icon_url=author.avatar_url,
+        embed.set_author(name='WaniKani Profile', icon_url='https://knowledge.wanikani.com/siteicon.png',
                          url=user.profile_url)
         summary: Summary = await self._dataFetcher.fetch_wanikani_user_summary(user_id=user_id)
         # Add all the custom embed fields.
@@ -367,7 +367,7 @@ class WaniKaniBotClient(discord.Client):
         if user_id not in self._dataFetcher.wanikani_users.keys():
             self._dataFetcher.wanikani_users[user_id] = {}
 
-        user: User = await self.get_user_data_model(user_id=author.id)
+        user: User = await self.get_user_data_model(user_id=user_id)
         date: str = datetime.today().strftime('%Y-%m-%d')
         lesson_data: Dict[str, Any] = await self._dataFetcher.get_wanikani_data(user_id=user_id,
                                                                                 resource='assignments',
@@ -380,7 +380,7 @@ class WaniKaniBotClient(discord.Client):
                                              colour=author.colour,
                                              timestamp=datetime.now())
         embed.set_thumbnail(url='https://cdn.wanikani.com/default-avatar-300x300-20121121.png')
-        embed.set_author(name=user.username, icon_url=author.avatar_url,
+        embed.set_author(name='WaniKani Profile', icon_url='https://knowledge.wanikani.com/siteicon.png',
                          url=user.profile_url)
         # Add all the custom embed fields.
         embed.add_field(name='Completed Reviews',
