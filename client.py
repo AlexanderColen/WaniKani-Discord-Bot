@@ -61,7 +61,8 @@ class WaniKaniBotClient(discord.Client):
         # Replace the ID to your Discord User ID to allow access only for you.
         if message.author.id != 209076181365030913 and message.content.startswith(prefix):
             await message.channel.send(
-                content='Crabigator is being operated on, please try again later or contact the Lord of All.')
+                content='Crabigator is being operated on. '
+                        'Please try again later or contact the Lord of All <@!209076181365030913>.')
             return
         """
 
@@ -134,6 +135,8 @@ class WaniKaniBotClient(discord.Client):
         :return: The first hit from the emoji_array properly formatted to be sent. Empty string if nothing was found.
         """
         if guild:
+            # Shuffle emoji array to mix up the potential results.
+            random.shuffle(emoji_array)
             for em in await guild.fetch_emojis():
                 if any(e in em.name.lower() for e in emoji_array):
                     return f'<:{em.name}:{em.id}>'
@@ -247,7 +250,7 @@ class WaniKaniBotClient(discord.Client):
                     content=f'Crabigator does not know this person. I cannot delete what I do not know. {emoji}')
         # Fetch a WaniKani User's overall stats.
         elif command in ['user', 'userstats']:
-            await self.get_user_stats(words=words, channel=message.channel, author=message.author, prefix=prefix)
+            await self.get_user_stats(words=words, message=message, author=message.author, prefix=prefix)
         # Fetch a WaniKani User's daily stats.
         elif command in ['daily', 'dailyoverview', 'dailystatus', 'dailystats']:
             await self.get_daily_stats(words=words, channel=message.channel, author=message.author, prefix=prefix)
@@ -310,40 +313,58 @@ class WaniKaniBotClient(discord.Client):
                     return -1
         return -1
 
-    async def get_user_stats(self, words: List[str], channel: discord.TextChannel,
+    async def get_user_stats(self, words: List[str], message: discord.Message,
                              author: discord.member.Member, prefix: str) -> None:
         """
         Fetches and displays a WaniKani user.
         :param words: Array of arguments, if there is a second one it is a specific Discord.User.
-        :param channel: The Discord.TextChannel that the message should be sent to.
+        :param message: The Discord.Message that was received minus the prefix.
         :param author: The Discord.User that requested the statistics.
         :param prefix: The prefix used for the Crabigator.
         """
         user_id = self.extract_user_id(words=words, author=author)
         if user_id == -1:
-            await channel.send(content='Please tag **one** Discord User,'
+            await message.channel.send(content='Please tag **one** Discord User,'
                                        ' or provide **one** Discord User ID with this command.')
             return
 
         if not self._dataStorage.find_api_user(user_id=user_id):
-            await self.unknown_wanikani_user(channel=channel, prefix=prefix)
+            await self.unknown_wanikani_user(channel=message.channel, prefix=prefix)
             return
 
         if user_id not in self._dataFetcher.wanikani_users.keys():
             self._dataFetcher.wanikani_users[user_id] = {}
 
         user: User = await self._dataFetcher.fetch_wanikani_user_data(user_id=user_id)
-        embed: discord.Embed = discord.Embed(title='WaniKani Profile', url=user.profile_url,
+        embed: discord.Embed = discord.Embed(title=user.username, url=user.profile_url,
                                              colour=author.colour, timestamp=datetime.now())
         embed.set_thumbnail(url='https://cdn.wanikani.com/default-avatar-300x300-20121121.png')
-        embed.set_author(name='WaniKani Profile', icon_url='https://knowledge.wanikani.com/siteicon.png',
-                         url=user.profile_url)
         summary: Summary = await self._dataFetcher.fetch_wanikani_user_summary(user_id=user_id)
         # Add all the custom embed fields.
-        embed.add_field(name='Level', value=user.level, inline=False)
-        embed.add_field(name='Lessons available:', value=str(len(summary.available_lessons)), inline=False)
-        embed.add_field(name='Reviews available:', value=str(len(summary.available_reviews)), inline=False)
-        await self.send_embed(channel=channel, embed=embed)
+        embed.add_field(name='Level', value=f'{user.level}/{user.max_level}', inline=False)
+        # Get a good and bad emoji from the Guild.
+        happy_emoji: discord.Emoji = await self.fetch_emoji(message.guild, ['happy', 'yay', 'thumbsup', 'sugoi'])
+        if not happy_emoji:
+            happy_emoji = ':thumbsup:'
+        sad_emoji: discord.Emoji = await self.fetch_emoji(message.guild, ['sad', 'cry', 'thumbsdown', 'baka'])
+        if not sad_emoji:
+            sad_emoji = ':thumbsdown:'
+        if user.subscribed:
+            embed.add_field(name='Subscription Status',
+                            value=f"**{user.subscription_type.capitalize()}** cultist member since"
+                            f" {user.member_since[0:user.member_since.index('T')]} {happy_emoji}",
+                            inline=False)
+        else:
+            embed.add_field(name='Subscription Status', value=f"Wannabe cultist... {sad_emoji}", inline=False)
+        # Fetch counts of radicals, kanji and vocabulary learned and burned.
+        item_counts: List[int] = await self._dataFetcher.fetch_wanikani_item_counts(user_id=user_id)
+        embed.add_field(name='Radicals Learned:', value=str(item_counts[0]), inline=True)
+        embed.add_field(name='Kanji Learned:', value=str(item_counts[1]), inline=True)
+        embed.add_field(name='Vocabulary Learned:', value=str(item_counts[2]), inline=True)
+        embed.add_field(name='Items Burned:', value=str(item_counts[3]), inline=False)
+        embed.add_field(name='Lessons available:', value=str(len(summary.available_lessons)), inline=True)
+        embed.add_field(name='Reviews available:', value=str(len(summary.available_reviews)), inline=True)
+        await self.send_embed(channel=message.channel, embed=embed)
 
     async def get_daily_stats(self, words: List[str], channel: discord.TextChannel,
                               author: discord.member.Member, prefix: str) -> None:

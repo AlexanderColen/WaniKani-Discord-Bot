@@ -12,7 +12,6 @@ Discord bot written in Python for doing all kinds of WaniKani API actions.
 
 **In progress**
 * Displaying previous leveling statistics.
-* Expanding displayed user data.
 * More in-depth help command for each separate command.
 
 **Expansions**
