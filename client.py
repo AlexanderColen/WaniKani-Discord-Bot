@@ -72,14 +72,14 @@ class WaniKaniBotClient(discord.Client):
             # Prevent empty commands.
             if message.content:
                 self.command_count += 1
-                async with message.channel.typing():
-                    try:
-                        await self.handle_command(message=message, prefix=prefix)
-                    except Exception as ex:
-                        print(ex)
-                        await self.oopsie(channel=message.channel,
-                                          attempted_command=message.content.split(' ')[0],
-                                          prefix=prefix)
+                await message.channel.trigger_typing()
+                try:
+                    await self.handle_command(message=message, prefix=prefix)
+                except Exception as ex:
+                    print(ex)
+                    await self.oopsie(channel=message.channel,
+                                      attempted_command=message.content.split(' ')[0],
+                                      prefix=prefix)
 
     @staticmethod
     async def send_image(channel: discord.TextChannel, image_name: str) -> None:
@@ -169,7 +169,7 @@ class WaniKaniBotClient(discord.Client):
         """
         await channel.send(
             content=f'Crabigator got too caught up studying and failed to handle `{prefix}{attempted_command}`. '
-            f'Please notify my Overlord.')
+            f'Please notify my Overlord <@!209076181365030913>.')
 
     async def handle_command(self, message: discord.Message, prefix: str) -> None:
         """
@@ -437,7 +437,7 @@ class WaniKaniBotClient(discord.Client):
             user.level_progressions.append(level_progress)
         await channel.send(
             content=f"Compiling your data took forever, so I took a nap instead. "
-            f"Just use https://www.wkstats.com/ for now.")
+            f"Just use https://www.wkstats.com/ for now or bitch at <@!209076181365030913>.")
 
     async def get_help(self, words: List[str], channel: discord.TextChannel, prefix: str):
         """
