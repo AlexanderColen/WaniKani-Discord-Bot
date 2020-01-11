@@ -212,7 +212,7 @@ class WaniKaniBotClient(discord.Client):
 
         image: Image = Image.open('img/sign.png')
         draw: ImageDraw = ImageDraw.Draw(image)
-        font: ImageFont = ImageFont.truetype('/usr/local/share/fonts/TruetypewriterPolyglott-mELae.ttf', 40)
+        font: ImageFont = ImageFont.truetype('/root/.fonts/TruetypewriterPolyglott-mELa.ttf', 40)
 
         # Split the text into lines based on width.
         lines = self.split_text_into_lines(text=text, max_width=200, font=font)
