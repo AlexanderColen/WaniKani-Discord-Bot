@@ -5,6 +5,7 @@ from util.models.wanikani.Level_Progress import LevelProgress
 from util.models.wanikani.Summary import Summary
 from util.models.wanikani.User import User
 from datetime import datetime
+from PIL import Image, ImageFont, ImageDraw
 from typing import Any, Dict, List
 import discord
 import random
@@ -174,6 +175,67 @@ class WaniKaniBotClient(discord.Client):
             content=f'Crabigator got too caught up studying and failed to handle `{prefix}{attempted_command}`. '
             f'Please notify my Overlord <@!209076181365030913>.')
 
+    @staticmethod
+    def split_text_into_lines(text: str, max_width: int, font: ImageFont) -> List[str]:
+        # Shoutout to StackOverflow for this one.
+        # https://stackoverflow.com/questions/43828154/breaking-a-string-along-whitespace-once-certain-width-is-exceeded-python
+        lines: List[str] = []
+        string: str = ''
+        line_width: int = 0
+        for c in text:
+            line_width += font.getsize(c)[0]
+            string += str(c)
+            if line_width > max_width:
+                line_width += font.getsize(c)[0]
+                string += c
+                if line_width > max_width:
+                    s = string.rsplit(" ", 1)
+                    string = s[0]
+                    lines.append(string)
+
+                    try:
+                        string = s[1]
+                        line_width = len(string) * 5
+                    except:
+                        string = ""
+                        line_width = 0
+        # Leftover characters string should also be appended.
+        if string:
+            lines.append(string)
+
+        return lines
+
+    async def draw_on_sign(self, message: discord.Message, command: str, channel: discord.TextChannel, prefix: str):
+        text: str = message.content.replace(f'{command} ', '', 1)
+        if message.content.strip() == command:
+            text = f'{prefix}draw <MESSAGE>'
+
+        image: Image = Image.open('img/sign.png')
+        draw: ImageDraw = ImageDraw.Draw(image)
+        font: ImageFont = ImageFont.truetype('/usr/local/share/fonts/TruetypewriterPolyglott-mELae.ttf', 40)
+
+        # Split the text into lines based on width.
+        lines = self.split_text_into_lines(text=text, max_width=200, font=font)
+        # Only 3 lines of text fit on the sign.
+        if len(lines) > 3:
+            lines = self.split_text_into_lines(text='Max length exceeded!', max_width=200, font=font)
+        y_spacing: int = 45
+        y_val: int = 0
+        # Determine where to start drawing based on the amount of lines.
+        if len(lines) == 1:
+            y_val = 70
+        elif len(lines) == 2:
+            y_val = 47
+        elif len(lines) == 3:
+            y_val = 25
+        # Draw each line on the sign.
+        for line in lines:
+            line_x, line_y = font.getsize(text=line)
+            draw.text(xy=(image.width - 140 - line_x / 2, y_val), text=line, fill=(0, 0, 0), font=font)
+            y_val += y_spacing
+        image.save(fp=f'img/drawnimage.png')
+        await self.send_image(channel=channel, image_name=f'img/drawnimage.png')
+
     async def handle_command(self, message: discord.Message, prefix: str) -> None:
         """
         Handle requests (commands) given to the Crabigator.
@@ -257,6 +319,8 @@ class WaniKaniBotClient(discord.Client):
         # Fetch a WaniKani User's leveling statistics.
         elif command in ['levelstats', 'levelstats', 'leveling', 'levelingstatus', 'levelingstats']:
             await self.get_leveling_stats(words=words, channel=message.channel, author=message.author, prefix=prefix)
+        elif command in ['draw', 'certify']:
+            await self.draw_on_sign(command=command, message=message, channel=message.channel, prefix=prefix)
         # Congratulate someone.
         elif command in ['congratulations', 'congrats', 'grats', 'gratz', 'gz', 'gj', 'goodjob']:
             await self.send_image(channel=message.channel, image_name='img/concrabs.png')
@@ -495,9 +559,8 @@ class WaniKaniBotClient(discord.Client):
                             value="Displays the WaniKani user's leveling statistics. "
                                   "Optionally you can target another user.",
                             inline=False)
-            embed.add_field(name=f'{prefix}daily',
-                            value="Displays the WaniKani user's daily statistics."
-                                  "Optionally you can target another user.",
+            embed.add_field(name=f'{prefix}draw',
+                            value="Draws your message on a sign.",
                             inline=False)
             embed.add_field(name=f'{prefix}congratulations',
                             value=':tada:',
