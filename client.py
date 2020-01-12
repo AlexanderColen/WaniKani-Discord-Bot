@@ -187,7 +187,6 @@ class WaniKaniBotClient(discord.Client):
             string += str(c)
             if line_width > max_width:
                 line_width += font.getsize(c)[0]
-                string += c
                 if line_width > max_width:
                     s = string.rsplit(" ", 1)
                     string = s[0]
@@ -196,7 +195,7 @@ class WaniKaniBotClient(discord.Client):
                     try:
                         string = s[1]
                         line_width = len(string) * 5
-                    except:
+                    except IndexError:
                         string = ""
                         line_width = 0
         # Leftover characters string should also be appended.
@@ -210,10 +209,12 @@ class WaniKaniBotClient(discord.Client):
         if message.content.strip() == command:
             text = f'{prefix}draw <MESSAGE>'
 
-        image: Image = Image.open('img/sign.png')
-        draw: ImageDraw = ImageDraw.Draw(image)
+        bg_image: Image = Image.open('img/crabigator_sign.png')
+        text_image: Image = Image.open('img/to_draw_image.png')
+        draw: ImageDraw = ImageDraw.Draw(text_image)
         font: ImageFont = ImageFont.truetype('/root/.fonts/TruetypewriterPolyglott-mELa.ttf', 40)
-
+        # Change to this font for Windows machines.
+        # font: ImageFont = ImageFont.truetype('arial.ttf', 40)
         # Split the text into lines based on width.
         lines = self.split_text_into_lines(text=text, max_width=200, font=font)
         # Only 3 lines of text fit on the sign.
@@ -225,15 +226,30 @@ class WaniKaniBotClient(discord.Client):
         if len(lines) == 1:
             y_val = 70
         elif len(lines) == 2:
-            y_val = 47
+            y_val = 40
         elif len(lines) == 3:
-            y_val = 25
+            y_val = 10
         # Draw each line on the sign.
         for line in lines:
             line_x, line_y = font.getsize(text=line)
-            draw.text(xy=(image.width - 140 - line_x / 2, y_val), text=line, fill=(0, 0, 0), font=font)
+            draw.text(xy=(text_image.width - 235 - line_x / 2, y_val), text=line, font=font)
             y_val += y_spacing
-        image.save(fp=f'img/drawnimage.png')
+
+        # Rotate text image before pasting it.
+        text_image = text_image.convert('RGBA')
+        text_image = text_image.rotate(angle=-12, resample=Image.NEAREST, expand=1, fillcolor='white')
+        # Replace all the white with transparent.
+        new_data = []
+        for item in text_image.getdata():
+            if item[0] == 255 and item[1] == 255 and item[2] == 255:
+                new_data.append((255, 255, 255, 0))
+            else:
+                new_data.append(item)
+        text_image.putdata(data=new_data)
+
+        bg_image.paste(text_image, (0, 0), text_image)
+
+        bg_image.save(fp=f'img/drawnimage.png')
         await self.send_image(channel=channel, image_name=f'img/drawnimage.png')
 
     async def handle_command(self, message: discord.Message, prefix: str) -> None:
