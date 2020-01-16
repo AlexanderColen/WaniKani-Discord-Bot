@@ -51,7 +51,7 @@ class DataFetcher:
         user: User = User(last_update=user_data['data_updated_at'], wk_id=user_data['data']['id'],
                           username=user_data['data']['username'], profile_url=user_data['data']['profile_url'],
                           level=user_data['data']['level'], member_since=user_data['data']['started_at'],
-                          subscribed=user_data['data']['subscribed'],
+                          subscribed=user_data['data']['subscription']['active'],
                           subscription_type=user_data['data']['subscription']['type'],
                           max_level=user_data['data']['subscription']['max_level_granted'],
                           on_vacation_since=user_data['data']['current_vacation_started_at'])
