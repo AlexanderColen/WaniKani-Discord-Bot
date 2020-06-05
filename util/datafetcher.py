@@ -48,6 +48,9 @@ class DataFetcher:
         :return: The data as a util.models.User object.
         """
         user_data: Dict[str, Any] = await self.get_wanikani_data(user_id=user_id, resource='user')
+        if user_data is None:
+            return None
+
         user: User = User(last_update=user_data['data_updated_at'], wk_id=user_data['data']['id'],
                           username=user_data['data']['username'], profile_url=user_data['data']['profile_url'],
                           level=user_data['data']['level'], member_since=user_data['data']['started_at'],

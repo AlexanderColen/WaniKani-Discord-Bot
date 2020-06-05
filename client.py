@@ -37,7 +37,7 @@ class WaniKaniBotClient(discord.Client):
         print('# Logged on as {0}! #'.format(self.user))
         print('#################################')
         await self.change_status()
-        await self._scheduler.run(coro=self.change_status, time=60)
+        await self._scheduler.run(coro=self.change_status, time=300)
 
     async def on_message(self, message: discord.Message) -> None:
         """
@@ -66,6 +66,10 @@ class WaniKaniBotClient(discord.Client):
                         'Please try again later or contact the Lord of All <@!209076181365030913>.')
             return
         """
+
+        # Always allow help by using wk!help.
+        if message.content == 'wk!help':
+            await self.get_help(words=['help'], channel=message.channel, prefix=prefix)
 
         if message.content.startswith(prefix):
             print('\n{0}'.format(message))
@@ -149,7 +153,7 @@ class WaniKaniBotClient(discord.Client):
         Changes the status of the Crabigator to a random sentence from resources.statuses.txt.
         """
         await self.change_presence(
-            activity=discord.Game(f'{random.choice(self.statuses)}')
+            activity=discord.Game(f'wk!help ~ {random.choice(self.statuses)}')
         )
 
     @staticmethod
